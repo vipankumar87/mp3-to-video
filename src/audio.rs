@@ -1,3 +1,4 @@
+use crate::audio_combiner;
 use std::fs::File;
 use std::io::Write;
 use std::process::{Command, exit};
@@ -8,7 +9,7 @@ use std::fs;
     
         let temp_file = "input_files.txt";
         let mut file = File::create(temp_file).expect("Unable to create file");
-    
+        let tmp_output = "merge.mp3";
         for mp3 in mp3_files {
             writeln!(file, "file '{}'", mp3).expect("Unable to write to file");
         }
@@ -23,7 +24,7 @@ use std::fs;
             .arg(temp_file)
             .arg("-c")
             .arg("copy")
-            .arg(output_path)
+            .arg(tmp_output)
             .output()
             .expect("Failed to merge MP3 files");
     
@@ -32,6 +33,9 @@ use std::fs;
             exit(1);
         }
     
-        println!("MP3 files merged into: {}", output_path);
+        let mp3s = "mp3s";
+//        println!("MP3 files merged into: {}", tmp_output);
+        let _ = audio_combiner::create_background_audio(&tmp_output, &mp3s, output_path);  // tmp_output can be used as is
+        // fs::remove_file(tmp_output).expect("Failed to delete temp file list");
         fs::remove_file(temp_file).expect("Failed to delete temp file list");
     }

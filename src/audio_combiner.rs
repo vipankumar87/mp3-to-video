@@ -2,6 +2,7 @@ use std::process::Command;
 use std::fs;
 use rand::seq::SliceRandom;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::io::{self, Write};  // Make sure to import `Write`
 
 pub fn get_mp3_duration(file_path: &str) -> Result<f64, String> {
     let output = Command::new("ffmpeg")
@@ -29,6 +30,24 @@ pub fn get_mp3_duration(file_path: &str) -> Result<f64, String> {
     }
 
     Err("Failed to extract duration.".to_string())
+}
+
+pub fn adjust_background_volume(background_mp3: &str, output_file: &str, volume_factor: f32) -> Result<(), String> {
+    let output = Command::new("ffmpeg")
+        .args(&[
+            "-i", background_mp3,
+            "-filter:a", &format!("volume={}", volume_factor), // Adjust volume by a factor
+            "-c:a", "mp3",
+            "-y", output_file,
+        ])
+        .output()
+        .expect("Failed to execute ffmpeg for volume adjustment");
+
+    if !output.status.success() {
+        return Err("Failed to adjust volume of background audio.".to_string());
+    }
+
+    Ok(())
 }
 
 pub fn create_background_audio(main_mp3: &str, background_dir: &str, output_file: &str) -> Result<(), String> {
@@ -70,6 +89,7 @@ pub fn create_background_audio(main_mp3: &str, background_dir: &str, output_file
 
     for file in selected_files {
         if combined_duration < main_duration {
+            
             let file_duration = get_mp3_duration(file).unwrap_or(0.0);
             selected_audio.push(file);
             combined_duration += file_duration;
@@ -77,21 +97,44 @@ pub fn create_background_audio(main_mp3: &str, background_dir: &str, output_file
             break;
         }
     }
-
+    
     if combined_duration > main_duration {
         // Logic to trim the last file can be added here if needed.
     }
 
+    // Adjust volume of the background audio before combining
+    let background_output_file = "temp_background.mp3";
+    adjust_background_volume(selected_audio[0], background_output_file, 0.3)?;
+
+    // Create a temporary text file with the paths of the files to be combined
+    let concat_file = "temp_files_to_concat.txt";
+    let mut file = fs::File::create(concat_file).expect("Failed to create concat file");
+
+    for audio in selected_audio {
+        writeln!(file, "file '{}'", audio)
+        .expect(&format!("Failed to write to concat file {}", audio));
+    }
+
     // Use ffmpeg to concatenate the selected audio files and create the output
-    let concat_list = selected_audio.join("|");
-    Command::new("ffmpeg")
+    let status = Command::new("ffmpeg")
         .args(&[
-            "-i", &concat_list,
-            "-filter_complex", "concat=n=1:v=0:a=1",
+            "-f", "concat",
+            "-safe", "0",
+            "-i", concat_file,
+            "-c", "copy",
             "-y", output_file,
         ])
         .status()
-        .expect("Failed to execute ffmpeg");
+        .expect("Failed to execute ffmpeg to combine MP3s");
+
+    if !status.success() {
+        return Err("Failed to combine MP3 files.".to_string());
+    }
+
+    // Clean up temporary files
+    // fs::remove_file(concat_file).expect("Failed to remove concat file");
+    // fs::remove_file(background_output_file).expect("Failed to remove temp background file");
 
     Ok(())
 }
+

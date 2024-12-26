@@ -1,7 +1,7 @@
+mod audio_combiner;
 mod audio;  // Declare audio module
 mod video;  // Declare video module
 mod utils;  // Declare utils module
-
 use std::env;
 use std::process::exit;
 fn main() {
